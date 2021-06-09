@@ -32,7 +32,6 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.camel.test.junit5.TestSupport.assertIsInstanceOf;
@@ -132,7 +131,6 @@ public class KafkaConsumerFullTest extends BaseEmbeddedKafkaTest {
     }
 
     @Test
-    @Disabled("Currently there is a bug in kafka which leads to an uninterruptable thread so a resub take too long (works manually)")
     public void kafkaMessageIsConsumedByCamelSeekedToBeginning() throws Exception {
         to.expectedMessageCount(5);
         to.expectedBodiesReceivedInAnyOrder("message-0", "message-1", "message-2", "message-3", "message-4");
@@ -161,7 +159,6 @@ public class KafkaConsumerFullTest extends BaseEmbeddedKafkaTest {
     }
 
     @Test
-    @Disabled("Currently there is a bug in kafka which leads to an uninterruptable thread so a resub take too long (works manually)")
     public void kafkaMessageIsConsumedByCamelSeekedToEnd() throws Exception {
         to.expectedMessageCount(5);
         to.expectedBodiesReceivedInAnyOrder("message-0", "message-1", "message-2", "message-3", "message-4");

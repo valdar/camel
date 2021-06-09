@@ -18,14 +18,12 @@ package org.apache.camel.processor.idempotent.kafka;
 
 import org.apache.camel.BindToRegistry;
 import org.apache.camel.EndpointInject;
+import org.apache.camel.ProducerTemplate;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.kafka.BaseEmbeddedKafkaTest;
 import org.apache.camel.component.mock.MockEndpoint;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -33,10 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Test whether the KafkaIdempotentRepository successfully recreates its cache from pre-existing topics. This guarantees
  * that the de-duplication state survives application instance restarts.
  *
- * This test requires running in a certain order (which isn't great for unit testing), hence the ordering-related
- * annotations.
  */
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class KafkaIdempotentRepositoryPersistenceTest extends BaseEmbeddedKafkaTest {
 
     // Every instance of the repository must use a different topic to guarantee isolation between tests
@@ -61,12 +56,9 @@ public class KafkaIdempotentRepositoryPersistenceTest extends BaseEmbeddedKafkaT
         };
     }
 
-    @Order(1)
     @Test
-    public void testFirstPassFiltersAsExpected() throws InterruptedException {
-        for (int i = 0; i < 10; i++) {
-            template.sendBodyAndHeader("direct:in", "Test message", "id", i % 5);
-        }
+    public void testRestartFiltersAsExpected() throws InterruptedException {
+        send10MsssagesModule5(template);
 
         // all records sent initially
         assertEquals(10, mockBefore.getReceivedCounter());
@@ -76,22 +68,33 @@ public class KafkaIdempotentRepositoryPersistenceTest extends BaseEmbeddedKafkaT
 
         // only first 1-4 records are received, the rest are filtered
         assertEquals(5, mockOut.getReceivedCounter());
+
+        //let's simulate a proper restart
+        context().stop();
+        // we also create a new Kafka Idempotent Repository
+        KafkaIdempotentRepository restartedKafkaIdempotentRepository
+                = new KafkaIdempotentRepository("TEST_PERSISTENCE", getBootstrapServers());
+        context().getRegistry().bind("kafkaIdempotentRepository", restartedKafkaIdempotentRepository);
+        context().start();
+
+        //we need to manually recreate the ProducerTemplate
+        ProducerTemplate template = context.createProducerTemplate();
+        template.start();
+        send10MsssagesModule5(template);
+
+        // all records sent initially (we need to manually lookup for mock endpoints)
+        assertEquals(10, context().getEndpoint("mock:before", MockEndpoint.class).getReceivedCounter());
+
+        // the state from the previous test guarantees that all attempts now are blocked (we need to use the newly created Kafka Idempotent Repository)
+        assertEquals(10, restartedKafkaIdempotentRepository.getDuplicateCount());
+
+        // nothing gets passed the idempotent consumer this time (we need to manually lookup for mock endpoints)
+        assertEquals(0, context().getEndpoint("mock:out", MockEndpoint.class).getReceivedCounter());
     }
 
-    @Order(2)
-    @Test
-    public void testSecondPassFiltersEverything() throws InterruptedException {
+    private void send10MsssagesModule5(ProducerTemplate template) {
         for (int i = 0; i < 10; i++) {
             template.sendBodyAndHeader("direct:in", "Test message", "id", i % 5);
         }
-
-        // all records sent initially
-        assertEquals(10, mockBefore.getReceivedCounter());
-
-        // the state from the previous test guarantees that all attempts now are blocked
-        assertEquals(10, kafkaIdempotentRepository.getDuplicateCount());
-
-        // nothing gets passed the idempotent consumer this time
-        assertEquals(0, mockOut.getReceivedCounter());
     }
 }
